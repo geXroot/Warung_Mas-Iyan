@@ -266,6 +266,8 @@ function clearOrder(){
   editingNumber=null;
   document.getElementById('saveBtn').textContent='💾 Simpan';
   document.getElementById('clearBtn').textContent='Kosongkan';
+  const lele=document.getElementById('lelePrice');
+  if(lele) lele.value='';
   render();
 }
 document.querySelectorAll('[data-i]').forEach(b=>b.addEventListener('click',()=>{
@@ -323,6 +325,8 @@ document.getElementById('saveBtn').addEventListener('click',()=>{
 
   saveData();
   updateSummary();
+  const lele=document.getElementById('lelePrice');
+  if(lele) lele.value='';
   clearOrder();
 });
 loadData();
