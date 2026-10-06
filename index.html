@@ -192,6 +192,8 @@ function editOrder(orderNumber){
 
   editingNumber=orderNumber;
   document.getElementById('customer').value=o.customer;
+  const leleInput=document.getElementById('lelePrice');
+  if(leleInput) leleInput.value=o.lelePrice||'';
 
   qty=names.map(name=>{
     const safeName=name.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');
@@ -261,7 +263,7 @@ function updateSummary(){
   renderOrders();
 }
 function clearOrder(){
-  qty=[0,0,0,0,0];
+  qty=[0,0,0,0];
   document.getElementById('customer').value='';
   editingNumber=null;
   document.getElementById('saveBtn').textContent='💾 Simpan';
@@ -297,6 +299,7 @@ document.getElementById('saveBtn').addEventListener('click',()=>{
   if(!t){alert('Pilih menu terlebih dahulu.');return;}
 
   const customer=document.getElementById('customer').value.trim()||'Pelanggan';
+  const lelePrice=document.getElementById('lelePrice')?.value||'';
   const items=qty.map((v,i)=>v?`${icons[i]} ${names[i]} × ${v}`:'').filter(Boolean).join(' • ');
   const itemsCount=qty.reduce((s,v)=>s+v,0);
 
@@ -308,7 +311,8 @@ document.getElementById('saveBtn').addEventListener('click',()=>{
         customer,
         items,
         total:t,
-        itemsCount
+        itemsCount,
+        lelePrice
       };
     }
   }else{
@@ -319,6 +323,7 @@ document.getElementById('saveBtn').addEventListener('click',()=>{
     orders.unshift({
       number,customer,items,total:t,
       itemsCount,
+      lelePrice,
       createdAt:new Date().toISOString()
     });
   }
