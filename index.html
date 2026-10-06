@@ -92,7 +92,36 @@ function loadData(){
     orders=[]; number=0;
   }
 }
+function renumberOrders(){
+  // Nomor selalu rapat berdasarkan urutan waktu pembuatan:
+  // pesanan paling lama = #1, berikutnya = #2, dan seterusnya.
+  const chronological=[...orders].sort((a,b)=>{
+    return new Date(a.createdAt)-new Date(b.createdAt);
+  });
+
+  chronological.forEach((o,index)=>{
+    o.number=index+1;
+  });
+
+  // Tetap tampilkan pesanan terbaru di bagian paling atas.
+  orders.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+
+  number=orders.length;
+}
+
+function syncOrderNumber(){
+  // Selalu sinkronkan nomor berikutnya dengan data pesanan yang benar-benar ada.
+  // Ini mencegah nomor lompat/berulang jika data pernah dihapus atau diubah.
+  const maxNumber=orders.reduce((max,o)=>{
+    const n=Number(o.number);
+    return Number.isFinite(n)?Math.max(max,n):max;
+  },0);
+  number=maxNumber;
+  return number;
+}
+
 function saveData(){
+  syncOrderNumber();
   localStorage.setItem(STORAGE_KEY,JSON.stringify({orders,number}));
 }
 function total(){return qty.reduce((s,v,i)=>s+v*prices[i],0)}
@@ -120,8 +149,8 @@ function renderOrders(){
       <div class="ordertime">🕒 ${formatDateTime(o.createdAt)}</div>
       <div class="orderitems">${escapeHtml(o.items)}</div>
       <div class="orderactions">
-        <button class="editbtn" onclick="editOrder(${o.number})">✏️ Edit</button>
-        <button class="deletebtn" onclick="deleteOrder(${o.number})">🗑️ Hapus</button>
+        <button class="editbtn" data-action="edit" data-number="${o.number}">✏️ Edit</button>
+        <button class="deletebtn" data-action="delete" data-number="${o.number}">🗑️ Hapus</button>
       </div>
     </div>`).join('');
 }
@@ -152,16 +181,26 @@ function editOrder(orderNumber){
 }
 
 function deleteOrder(orderNumber){
-  const o=orders.find(x=>x.number===orderNumber);
-  if(!o)return;
+  const n=Number(orderNumber);
+  const index=orders.findIndex(x=>Number(x.number)===n);
+  if(index===-1){
+    alert('Pesanan tidak ditemukan.');
+    return;
+  }
+
+  const o=orders[index];
 
   if(!confirm(`Hapus pesanan #${o.number} ${o.customer}?`))return;
 
-  orders=orders.filter(x=>x.number!==orderNumber);
+  orders.splice(index,1);
+
+  // Setelah dihapus, rapikan kembali nomor menjadi #1, #2, #3, ...
+  renumberOrders();
+
   saveData();
   updateSummary();
 
-  if(editingNumber===orderNumber){
+  if(editingNumber!==null && Number(editingNumber)===n){
     clearOrder();
   }
 }
@@ -187,6 +226,18 @@ document.querySelectorAll('[data-i]').forEach(b=>b.addEventListener('click',()=>
   qty[i]=Math.max(0,qty[i]+d);
   render();
 }));
+document.getElementById('orders').addEventListener('click',(event)=>{
+  const button=event.target.closest('button[data-action]');
+  if(!button)return;
+
+  const orderNumber=Number(button.dataset.number);
+  if(button.dataset.action==='delete'){
+    deleteOrder(orderNumber);
+  }else if(button.dataset.action==='edit'){
+    editOrder(orderNumber);
+  }
+});
+
 document.getElementById('clearBtn').addEventListener('click',clearOrder);
 document.getElementById('newBtn').addEventListener('click',()=>{
   clearOrder();
@@ -212,7 +263,10 @@ document.getElementById('saveBtn').addEventListener('click',()=>{
       };
     }
   }else{
-    number++;
+    // Pastikan nomor yang ada sudah rapat sebelum membuat pesanan baru.
+    renumberOrders();
+    number=orders.length+1;
+
     orders.unshift({
       number,customer,items,total:t,
       itemsCount,
@@ -225,6 +279,8 @@ document.getElementById('saveBtn').addEventListener('click',()=>{
   clearOrder();
 });
 loadData();
+renumberOrders();
+saveData();
 updateSummary();
 render();
 </script>
