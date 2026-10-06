@@ -66,14 +66,6 @@ input:focus{border-color:#16834b}
 
 </div>
 
-<div class="panel">
-<label>Metode Pembayaran</label>
-<select id="paymentMethod" style="width:100%;min-height:44px;border:1px solid #d9e0dc;border-radius:10px;padding:9px 11px">
-<option value="Cash">💵 Cash</option>
-<option value="QRIS">📱 QRIS</option>
-</select>
-</div>
-
 <div class="totalbox">
 <div class="muted">TOTAL PESANAN</div><div class="total" id="total">Rp0</div>
 <div class="actions"><button class="primary" id="saveBtn">💾 Simpan</button><button class="secondary" id="clearBtn">Kosongkan</button></div>
@@ -94,10 +86,6 @@ input:focus{border-color:#16834b}
 <div class="item"><div class="muted">🐟 Lele</div><div id="itemLele" style="font-size:22px;font-weight:900">0</div></div>
 </div>
 <div style="margin-top:10px"><div class="muted">Total Penjualan</div><div id="salesTotal" style="font-size:26px;font-weight:900">Rp0</div></div>
-<div class="grid" style="margin-top:10px">
-<div class="item"><div class="muted">💵 Total Cash</div><div id="cashTotal" style="font-size:22px;font-weight:900">Rp0</div></div>
-<div class="item"><div class="muted">📱 Total QRIS</div><div id="qrisTotal" style="font-size:22px;font-weight:900">Rp0</div></div>
-</div>
 </div>
 
 <div class="panel">
@@ -183,7 +171,7 @@ function renderOrders(){
   box.innerHTML=orders.map(o=>`
     <div class="order">
       <div class="orderhead"><span>#${o.number} ${escapeHtml(o.customer)}</span><span>${money(o.total)}</span></div>
-      <div class="ordertime">🕒 ${formatDateTime(o.createdAt)} • ${o.paymentMethod==="QRIS"?"📱 QRIS":"💵 Cash"}</div>
+      <div class="ordertime">🕒 ${formatDateTime(o.createdAt)}</div>
       <div class="orderitems">${escapeHtml(o.items)}</div>
       <div class="orderactions">
         <button class="editbtn" data-action="edit" data-number="${o.number}">✏️ Edit</button>
@@ -204,6 +192,8 @@ function editOrder(orderNumber){
 
   editingNumber=orderNumber;
   document.getElementById('customer').value=o.customer;
+  const leleInput=document.getElementById('lelePrice');
+  if(leleInput) leleInput.value=o.lelePrice||'';
 
   qty=names.map(name=>{
     const safeName=name.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');
@@ -213,8 +203,6 @@ function editOrder(orderNumber){
 
   document.getElementById('saveBtn').textContent='💾 Update Pesanan';
   document.getElementById('clearBtn').textContent='Batal Edit';
-  const pm=document.getElementById('paymentMethod');
-  if(pm) pm.value=o.paymentMethod||'Cash';
   render();
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -247,8 +235,6 @@ function deleteOrder(orderNumber){
 function updateSummary(){
   const itemCount=orders.reduce((s,o)=>s+o.itemsCount,0);
   const sales=orders.reduce((s,o)=>s+o.total,0);
-  const cashSales=orders.filter(o=>o.paymentMethod!=='QRIS').reduce((s,o)=>s+o.total,0);
-  const qrisSales=orders.filter(o=>o.paymentMethod==='QRIS').reduce((s,o)=>s+o.total,0);
   const itemTotals={ayam:0,nasi:0,tahu:0,ampela:0,lele:0};
 
   orders.forEach(o=>{
@@ -274,8 +260,6 @@ function updateSummary(){
   document.getElementById('itemAmpela').textContent=itemTotals.ampela;
   document.getElementById('itemLele').textContent=itemTotals.lele;
   document.getElementById('salesTotal').textContent=money(sales);
-  const c=document.getElementById('cashTotal'); if(c) c.textContent=money(cashSales);
-  const q=document.getElementById('qrisTotal'); if(q) q.textContent=money(qrisSales);
   renderOrders();
 }
 function clearOrder(){
@@ -286,7 +270,6 @@ function clearOrder(){
   document.getElementById('clearBtn').textContent='Kosongkan';
   const lele=document.getElementById('lelePrice');
   if(lele) lele.value='';
-  const pm=document.getElementById('paymentMethod'); if(pm) pm.value='Cash';
   render();
 }
 document.querySelectorAll('[data-i]').forEach(b=>b.addEventListener('click',()=>{
@@ -316,7 +299,7 @@ document.getElementById('saveBtn').addEventListener('click',()=>{
   if(!t){alert('Pilih menu terlebih dahulu.');return;}
 
   const customer=document.getElementById('customer').value.trim()||'Pelanggan';
-  const paymentMethod=document.getElementById('paymentMethod')?.value||'Cash';
+  const lelePrice=document.getElementById('lelePrice')?.value||'';
   const items=qty.map((v,i)=>v?`${icons[i]} ${names[i]} × ${v}`:'').filter(Boolean).join(' • ');
   const itemsCount=qty.reduce((s,v)=>s+v,0);
 
@@ -329,7 +312,7 @@ document.getElementById('saveBtn').addEventListener('click',()=>{
         items,
         total:t,
         itemsCount,
-        paymentMethod
+        lelePrice
       };
     }
   }else{
@@ -340,7 +323,7 @@ document.getElementById('saveBtn').addEventListener('click',()=>{
     orders.unshift({
       number,customer,items,total:t,
       itemsCount,
-      paymentMethod,
+      lelePrice,
       createdAt:new Date().toISOString()
     });
   }
