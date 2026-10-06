@@ -50,6 +50,20 @@ input:focus{border-color:#16834b}
 <div class="item"><div class="icon">🍚</div><div class="name">Nasi</div><div class="price">Rp6.000</div><div class="qty"><button data-i="1" data-d="-1">−</button><span id="q1">0</span><button data-i="1" data-d="1">＋</button></div></div>
 <div class="item"><div class="icon">🥢</div><div class="name">Tahu / Tempe</div><div class="price">Rp5.000</div><div class="qty"><button data-i="2" data-d="-1">−</button><span id="q2">0</span><button data-i="2" data-d="1">＋</button></div></div>
 <div class="item"><div class="icon">🍢</div><div class="name">Ampela</div><div class="price">Rp10.000</div><div class="qty"><button data-i="3" data-d="-1">−</button><span id="q3">0</span><button data-i="3" data-d="1">＋</button></div></div>
+
+<div class="item">
+  <div class="icon">🐟</div>
+  <div class="name">Lele</div>
+  <div class="price">
+    <input id="lelePrice" type="text" placeholder="Harga lele" style="width:100%;margin-top:6px;min-height:36px">
+  </div>
+  <div class="qty">
+    <button data-i="4" data-d="-1">−</button>
+    <span id="q4">0</span>
+    <button data-i="4" data-d="1">＋</button>
+  </div>
+</div>
+
 </div>
 
 <div class="totalbox">
@@ -63,6 +77,14 @@ input:focus{border-color:#16834b}
 <div class="item"><div class="muted">Jumlah Pesanan</div><div id="orderCount" style="font-size:22px;font-weight:900">0</div></div>
 <div class="item"><div class="muted">Total Item</div><div id="itemCount" style="font-size:22px;font-weight:900">0</div></div>
 </div>
+<div style="margin-top:10px;font-weight:900">Jumlah Terjual per Menu</div>
+<div class="grid" style="margin-top:8px">
+<div class="item"><div class="muted">🍗 Ayam</div><div id="itemAyam" style="font-size:22px;font-weight:900">0</div></div>
+<div class="item"><div class="muted">🍚 Nasi</div><div id="itemNasi" style="font-size:22px;font-weight:900">0</div></div>
+<div class="item"><div class="muted">🥢 Tahu / Tempe</div><div id="itemTahu" style="font-size:22px;font-weight:900">0</div></div>
+<div class="item"><div class="muted">🍢 Ampela</div><div id="itemAmpela" style="font-size:22px;font-weight:900">0</div></div>
+<div class="item"><div class="muted">🐟 Lele</div><div id="itemLele" style="font-size:22px;font-weight:900">0</div></div>
+</div>
 <div style="margin-top:10px"><div class="muted">Total Penjualan</div><div id="salesTotal" style="font-size:26px;font-weight:900">Rp0</div></div>
 </div>
 
@@ -73,11 +95,11 @@ input:focus{border-color:#16834b}
 </div>
 
 <script>
-const prices=[21000,6000,5000,10000];
-const names=['Ayam','Nasi','Tahu/Tempe','Ampela'];
-const icons=['🍗','🍚','🥢','🍢'];
+const prices=[21000,6000,5000,10000,0];
+const names=['Ayam','Nasi','Tahu/Tempe','Ampela','Lele'];
+const icons=['🍗','🍚','🥢','🍢','🐟'];
 const STORAGE_KEY='kasir_pesanan_v2';
-let qty=[0,0,0,0], orders=[], number=0, editingNumber=null;
+let qty=[0,0,0,0,0], orders=[], number=0, editingNumber=null;
 const money=n=>'Rp'+new Intl.NumberFormat('id-ID').format(n);
 
 function loadData(){
@@ -124,7 +146,10 @@ function saveData(){
   syncOrderNumber();
   localStorage.setItem(STORAGE_KEY,JSON.stringify({orders,number}));
 }
-function total(){return qty.reduce((s,v,i)=>s+v*prices[i],0)}
+function total(){
+const lelePrice=Number((document.getElementById('lelePrice')?.value||'0').replace(/[^0-9]/g,''));
+return qty.reduce((s,v,i)=>s+v*(i===4?lelePrice:prices[i]),0);
+}
 function formatDateTime(iso){
   return new Intl.DateTimeFormat('id-ID',{
     day:'2-digit',month:'2-digit',year:'numeric',
@@ -208,8 +233,30 @@ function deleteOrder(orderNumber){
 function updateSummary(){
   const itemCount=orders.reduce((s,o)=>s+o.itemsCount,0);
   const sales=orders.reduce((s,o)=>s+o.total,0);
+  const itemTotals={ayam:0,nasi:0,tahu:0,ampela:0,lele:0};
+
+  orders.forEach(o=>{
+    const text=String(o.items||'');
+    const patterns={
+      ayam:/Ayam × (\d+)/,
+      nasi:/Nasi × (\d+)/,
+      tahu:/Tahu\/Tempe × (\d+)/,
+      ampela:/Ampela × (\d+)/,
+      lele:/Lele × (\d+)/
+    };
+    Object.keys(patterns).forEach(key=>{
+      const m=text.match(patterns[key]);
+      if(m) itemTotals[key]+=Number(m[1]);
+    });
+  });
+
   document.getElementById('orderCount').textContent=orders.length;
   document.getElementById('itemCount').textContent=itemCount;
+  document.getElementById('itemAyam').textContent=itemTotals.ayam;
+  document.getElementById('itemNasi').textContent=itemTotals.nasi;
+  document.getElementById('itemTahu').textContent=itemTotals.tahu;
+  document.getElementById('itemAmpela').textContent=itemTotals.ampela;
+  document.getElementById('itemLele').textContent=itemTotals.lele;
   document.getElementById('salesTotal').textContent=money(sales);
   renderOrders();
 }
