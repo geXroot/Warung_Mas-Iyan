@@ -110,120 +110,199 @@ input:focus{border-color:#16834b}
 const prices=[21000,6000,5000,10000,0];
 const names=['Ayam','Nasi','Tahu/Tempe','Ampela','Lele'];
 const icons=['🍗','🍚','🥢','🍢','🐟'];
-const STORAGE_KEY='kasir_pesanan_v2';
-let qty=[0,0,0,0,0], orders=[], number=0, editingNumber=null;
-const money=n=>'Rp'+new Intl.NumberFormat('id-ID').format(n);
+const STORAGE_KEY='kasir_pesanan_v3';
+
+let qty=[0,0,0,0,0];
+let orders=[];
+let number=0;
+let editingNumber=null;
+
+const money=n=>'Rp'+new Intl.NumberFormat('id-ID').format(Number(n)||0);
+
+function getLelePrice(){
+  const input=document.getElementById('lelePrice');
+  return Number(String(input?.value||'').replace(/[^0-9]/g,''))||0;
+}
 
 function loadData(){
   try{
-    const saved=JSON.parse(localStorage.getItem(STORAGE_KEY));
+    // Baca versi baru terlebih dahulu, lalu migrasikan data versi lama bila ada.
+    let saved=JSON.parse(localStorage.getItem(STORAGE_KEY));
+
+    if(!saved){
+      const old=localStorage.getItem('kasir_pesanan_v2');
+      if(old) saved=JSON.parse(old);
+    }
+
     if(saved){
       orders=Array.isArray(saved.orders)?saved.orders:[];
       number=Number(saved.number)||0;
+
+      orders=orders.map(o=>({
+        ...o,
+        paymentMethod:o.paymentMethod==='QRIS'?'QRIS':'Cash',
+        lelePrice:Number(o.lelePrice)||0,
+        itemsCount:Number(o.itemsCount)||0,
+        total:Number(o.total)||0,
+        createdAt:o.createdAt||new Date().toISOString()
+      }));
     }
   }catch(e){
     console.warn('Data lama tidak dapat dibaca:',e);
-    orders=[]; number=0;
+    orders=[];
+    number=0;
   }
 }
+
 function renumberOrders(){
-  // Nomor selalu rapat berdasarkan urutan waktu pembuatan:
-  // pesanan paling lama = #1, berikutnya = #2, dan seterusnya.
-  const chronological=[...orders].sort((a,b)=>{
-    return new Date(a.createdAt)-new Date(b.createdAt);
-  });
+  const chronological=[...orders].sort(
+    (a,b)=>new Date(a.createdAt)-new Date(b.createdAt)
+  );
 
   chronological.forEach((o,index)=>{
     o.number=index+1;
   });
 
-  // Tetap tampilkan pesanan terbaru di bagian paling atas.
-  orders.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  orders.sort(
+    (a,b)=>new Date(b.createdAt)-new Date(a.createdAt)
+  );
 
   number=orders.length;
 }
 
-function syncOrderNumber(){
-  // Selalu sinkronkan nomor berikutnya dengan data pesanan yang benar-benar ada.
-  // Ini mencegah nomor lompat/berulang jika data pernah dihapus atau diubah.
-  const maxNumber=orders.reduce((max,o)=>{
-    const n=Number(o.number);
-    return Number.isFinite(n)?Math.max(max,n):max;
-  },0);
-  number=maxNumber;
-  return number;
-}
-
 function saveData(){
-  syncOrderNumber();
+  renumberOrders();
   localStorage.setItem(STORAGE_KEY,JSON.stringify({orders,number}));
 }
+
 function total(){
-const lelePrice=Number((document.getElementById('lelePrice')?.value||'0').replace(/[^0-9]/g,''));
-return qty.reduce((s,v,i)=>s+v*(i===4?lelePrice:prices[i]),0);
+  const lelePrice=getLelePrice();
+
+  return qty.reduce((sum,v,i)=>{
+    const price=i===4?lelePrice:prices[i];
+    return sum+(Number(v)||0)*price;
+  },0);
 }
+
 function formatDateTime(iso){
   return new Intl.DateTimeFormat('id-ID',{
-    day:'2-digit',month:'2-digit',year:'numeric',
-    hour:'2-digit',minute:'2-digit',second:'2-digit'
+    day:'2-digit',
+    month:'2-digit',
+    year:'numeric',
+    hour:'2-digit',
+    minute:'2-digit',
+    second:'2-digit'
   }).format(new Date(iso));
 }
+
 function render(){
-  qty.forEach((v,i)=>document.getElementById('q'+i).textContent=v);
+  qty.forEach((v,i)=>{
+    const el=document.getElementById('q'+i);
+    if(el) el.textContent=Number(v)||0;
+  });
+
   document.getElementById('total').textContent=money(total());
 }
+
 function renderOrders(){
   const box=document.getElementById('orders');
+
   if(!orders.length){
     box.className='empty';
     box.textContent='Belum ada pesanan.';
     return;
   }
+
   box.className='';
+
   box.innerHTML=orders.map(o=>`
     <div class="order">
-      <div class="orderhead"><span>#${o.number} ${escapeHtml(o.customer)}</span><span>${money(o.total)}</span></div>
-      <div class="ordertime">🕒 ${formatDateTime(o.createdAt)} • ${o.paymentMethod==="QRIS"?"📱 QRIS":"💵 Cash"}</div>
-      <div class="orderitems">${escapeHtml(o.items)}</div>
-      <div class="orderactions">
-        <button class="editbtn" data-action="edit" data-number="${o.number}">✏️ Edit</button>
-        <button class="deletebtn" data-action="delete" data-number="${o.number}">🗑️ Hapus</button>
+      <div class="orderhead">
+        <span>#${o.number} ${escapeHtml(o.customer)}</span>
+        <span>${money(o.total)}</span>
       </div>
-    </div>`).join('');
+
+      <div class="ordertime">
+        🕒 ${formatDateTime(o.createdAt)} •
+        ${o.paymentMethod==='QRIS'?'📱 QRIS':'💵 Cash'}
+      </div>
+
+      <div class="orderitems">
+        ${escapeHtml(o.items)}
+        ${o.lelePrice>0 ? ` • Harga Lele: ${money(o.lelePrice)}` : ''}
+      </div>
+
+      <div class="orderactions">
+        <button class="editbtn"
+          data-action="edit"
+          data-number="${o.number}">
+          ✏️ Edit
+        </button>
+
+        <button class="deletebtn"
+          data-action="delete"
+          data-number="${o.number}">
+          🗑️ Hapus
+        </button>
+      </div>
+    </div>
+  `).join('');
 }
 
 function escapeHtml(value){
   return String(value).replace(/[&<>"']/g,ch=>({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
+    '&':'&amp;',
+    '<':'&lt;',
+    '>':'&gt;',
+    '"':'&quot;',
+    "'":'&#039;'
   }[ch]));
 }
 
-function editOrder(orderNumber){
-  const o=orders.find(x=>x.number===orderNumber);
-  if(!o)return;
+function parseQtyFromItems(items){
+  const text=String(items||'');
 
-  editingNumber=orderNumber;
-  document.getElementById('customer').value=o.customer;
-const leleInput=document.getElementById('lelePrice');
-if(leleInput) leleInput.value=o.lelePrice||'';
-
-  qty=names.map(name=>{
-    const safeName=name.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');
-    const match=o.items.match(new RegExp(safeName+' × (\\d+)'));
+  return names.map(name=>{
+    const safeName=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const match=text.match(new RegExp(safeName+' × (\\d+)'));
     return match?Number(match[1]):0;
   });
+}
 
-  const pm=document.getElementById('paymentMethod'); if(pm) pm.value=o.paymentMethod||'Cash';
+function editOrder(orderNumber){
+  const n=Number(orderNumber);
+  const o=orders.find(x=>Number(x.number)===n);
+
+  if(!o)return;
+
+  editingNumber=n;
+
+  document.getElementById('customer').value=o.customer||'';
+
+  // Pulihkan harga Lele.
+  document.getElementById('lelePrice').value=
+    o.lelePrice>0?String(o.lelePrice):'';
+
+  // Pulihkan jumlah semua menu termasuk Lele.
+  qty=parseQtyFromItems(o.items);
+
+  // Pulihkan metode pembayaran.
+  const pm=document.getElementById('paymentMethod');
+  if(pm) pm.value=o.paymentMethod||'Cash';
+
   document.getElementById('saveBtn').textContent='💾 Update Pesanan';
   document.getElementById('clearBtn').textContent='Batal Edit';
+
+  // Total langsung dihitung ulang.
   render();
-  render();
+
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
 function deleteOrder(orderNumber){
   const n=Number(orderNumber);
   const index=orders.findIndex(x=>Number(x.number)===n);
+
   if(index===-1){
     alert('Pesanan tidak ditemukan.');
     return;
@@ -235,9 +314,7 @@ function deleteOrder(orderNumber){
 
   orders.splice(index,1);
 
-  // Setelah dihapus, rapikan kembali nomor menjadi #1, #2, #3, ...
   renumberOrders();
-
   saveData();
   updateSummary();
 
@@ -247,83 +324,148 @@ function deleteOrder(orderNumber){
 }
 
 function updateSummary(){
-  const itemCount=orders.reduce((s,o)=>s+o.itemsCount,0);
-  const sales=orders.reduce((s,o)=>s+o.total,0);
-  const cashSales=orders.filter(o=>o.paymentMethod!=='QRIS').reduce((s,o)=>s+o.total,0);
-  const qrisSales=orders.filter(o=>o.paymentMethod==='QRIS').reduce((s,o)=>s+o.total,0);
-  const itemTotals={ayam:0,nasi:0,tahu:0,ampela:0,lele:0};
+  const itemCount=orders.reduce(
+    (s,o)=>s+(Number(o.itemsCount)||0),0
+  );
+
+  const sales=orders.reduce(
+    (s,o)=>s+(Number(o.total)||0),0
+  );
+
+  const cashSales=orders
+    .filter(o=>o.paymentMethod!=='QRIS')
+    .reduce((s,o)=>s+(Number(o.total)||0),0);
+
+  const qrisSales=orders
+    .filter(o=>o.paymentMethod==='QRIS')
+    .reduce((s,o)=>s+(Number(o.total)||0),0);
+
+  const itemTotals={
+    ayam:0,
+    nasi:0,
+    tahu:0,
+    ampela:0,
+    lele:0
+  };
 
   orders.forEach(o=>{
-    const text=String(o.items||'');
-    const patterns={
-      ayam:/Ayam × (\d+)/,
-      nasi:/Nasi × (\d+)/,
-      tahu:/Tahu\/Tempe × (\d+)/,
-      ampela:/Ampela × (\d+)/,
-      lele:/Lele × (\d+)/
-    };
-    Object.keys(patterns).forEach(key=>{
-      const m=text.match(patterns[key]);
-      if(m) itemTotals[key]+=Number(m[1]);
-    });
+    const q=parseQtyFromItems(o.items);
+
+    itemTotals.ayam+=q[0];
+    itemTotals.nasi+=q[1];
+    itemTotals.tahu+=q[2];
+    itemTotals.ampela+=q[3];
+    itemTotals.lele+=q[4];
   });
 
   document.getElementById('orderCount').textContent=orders.length;
   document.getElementById('itemCount').textContent=itemCount;
+
   document.getElementById('itemAyam').textContent=itemTotals.ayam;
   document.getElementById('itemNasi').textContent=itemTotals.nasi;
   document.getElementById('itemTahu').textContent=itemTotals.tahu;
   document.getElementById('itemAmpela').textContent=itemTotals.ampela;
   document.getElementById('itemLele').textContent=itemTotals.lele;
+
   document.getElementById('salesTotal').textContent=money(sales);
-  const c=document.getElementById('cashTotal'); if(c) c.textContent=money(cashSales);
-  const q=document.getElementById('qrisTotal'); if(q) q.textContent=money(qrisSales);
+  document.getElementById('cashTotal').textContent=money(cashSales);
+  document.getElementById('qrisTotal').textContent=money(qrisSales);
+
   renderOrders();
 }
+
 function clearOrder(){
-  qty=[0,0,0,0];
+  // Reset kelima menu.
+  qty=[0,0,0,0,0];
+
   document.getElementById('customer').value='';
+  document.getElementById('lelePrice').value='';
+
+  const pm=document.getElementById('paymentMethod');
+  if(pm) pm.value='Cash';
+
   editingNumber=null;
+
   document.getElementById('saveBtn').textContent='💾 Simpan';
   document.getElementById('clearBtn').textContent='Kosongkan';
-  const lele=document.getElementById('lelePrice');
-  if(lele) lele.value='';
-  const pm=document.getElementById('paymentMethod'); if(pm) pm.value='Cash';
+
   render();
 }
-document.querySelectorAll('[data-i]').forEach(b=>b.addEventListener('click',()=>{
-  const i=+b.dataset.i,d=+b.dataset.d;
-  qty[i]=Math.max(0,qty[i]+d);
-  render();
-}));
-document.getElementById('orders').addEventListener('click',(event)=>{
+
+document.querySelectorAll('[data-i]').forEach(button=>{
+  button.addEventListener('click',()=>{
+    const i=Number(button.dataset.i);
+    const d=Number(button.dataset.d);
+
+    qty[i]=Math.max(0,(Number(qty[i])||0)+d);
+
+    render();
+  });
+});
+
+// Total Lele berubah langsung ketika harga diketik/diubah.
+document.getElementById('lelePrice').addEventListener('input',render);
+document.getElementById('lelePrice').addEventListener('change',render);
+
+document.getElementById('orders').addEventListener('click',event=>{
   const button=event.target.closest('button[data-action]');
   if(!button)return;
 
   const orderNumber=Number(button.dataset.number);
+
   if(button.dataset.action==='delete'){
     deleteOrder(orderNumber);
-  }else if(button.dataset.action==='edit'){
+  }
+
+  if(button.dataset.action==='edit'){
     editOrder(orderNumber);
   }
 });
 
 document.getElementById('clearBtn').addEventListener('click',clearOrder);
+
 document.getElementById('newBtn').addEventListener('click',()=>{
   clearOrder();
   document.getElementById('customer').focus();
 });
-document.getElementById('saveBtn').addEventListener('click',()=>{
-  const t=total();
-  if(!t){alert('Pilih menu terlebih dahulu.');return;}
 
-  const customer=document.getElementById('customer').value.trim()||'Pelanggan';
-  const paymentMethod=document.getElementById('paymentMethod')?.value||'Cash';
-  const items=qty.map((v,i)=>v?`${icons[i]} ${names[i]} × ${v}`:'').filter(Boolean).join(' • ');
-  const itemsCount=qty.reduce((s,v)=>s+v,0);
+document.getElementById('saveBtn').addEventListener('click',()=>{
+  const lelePrice=getLelePrice();
+  const leleQty=Number(qty[4])||0;
+
+  // Lele dipilih tetapi harga belum diisi.
+  if(leleQty>0 && lelePrice<=0){
+    alert('Masukkan harga Lele terlebih dahulu.');
+    document.getElementById('lelePrice').focus();
+    return;
+  }
+
+  const t=total();
+
+  if(!t){
+    alert('Pilih menu terlebih dahulu.');
+    return;
+  }
+
+  const customer=
+    document.getElementById('customer').value.trim()||'Pelanggan';
+
+  const paymentMethod=
+    document.getElementById('paymentMethod')?.value||'Cash';
+
+  const items=qty.map((v,i)=>
+    v?`${icons[i]} ${names[i]} × ${v}`:''
+  ).filter(Boolean).join(' • ');
+
+  const itemsCount=qty.reduce(
+    (s,v)=>s+(Number(v)||0),0
+  );
 
   if(editingNumber!==null){
-    const index=orders.findIndex(o=>o.number===editingNumber);
+    const index=orders.findIndex(
+      o=>Number(o.number)===Number(editingNumber)
+    );
+
     if(index!==-1){
       orders[index]={
         ...orders[index],
@@ -331,17 +473,21 @@ document.getElementById('saveBtn').addEventListener('click',()=>{
         items,
         total:t,
         itemsCount,
+        lelePrice,
         paymentMethod
       };
     }
   }else{
-    // Pastikan nomor yang ada sudah rapat sebelum membuat pesanan baru.
     renumberOrders();
     number=orders.length+1;
 
     orders.unshift({
-      number,customer,items,total:t,
+      number,
+      customer,
+      items,
+      total:t,
       itemsCount,
+      lelePrice,
       paymentMethod,
       createdAt:new Date().toISOString()
     });
@@ -349,10 +495,12 @@ document.getElementById('saveBtn').addEventListener('click',()=>{
 
   saveData();
   updateSummary();
-  const lele=document.getElementById('lelePrice');
-  if(lele) lele.value='';
+
+  // Reset setelah Simpan/Update.
   clearOrder();
 });
+
+// Inisialisasi aplikasi.
 loadData();
 renumberOrders();
 saveData();
